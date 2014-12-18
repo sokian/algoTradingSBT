@@ -1,9 +1,6 @@
 package ru.sbt.exchange.client;
 
-import ru.sbt.exchange.domain.Order;
-import ru.sbt.exchange.domain.PeriodInfo;
-import ru.sbt.exchange.domain.Portfolio;
-import ru.sbt.exchange.domain.TopOrders;
+import ru.sbt.exchange.domain.*;
 import ru.sbt.exchange.domain.instrument.Instrument;
 import ru.sbt.exchange.domain.instrument.Instruments;
 
@@ -80,6 +77,48 @@ public class MainStrategy implements Strategy {
 
     @Override
     public void makeMove(Broker broker) {
+        cancelMyOrders(broker);
+        double eps = 1e-9;
+        for (Instrument instrument : Instruments.supportedInstruments()) {
+            TopOrders tp = broker.getTopOrders(instrument);
+            if (!tp.getBuyOrders().isEmpty()) {
+                double bestPrice = tp.getBuyOrders().get(0).getPrice();
+                if (bestPrice > limitPrice(instrument, Direction.BUY)) {
+                    broker.addOrder(tp.getBuyOrders().get(0).opposite());
+                }
+            }
+            if (!tp.getSellOrders().isEmpty()) {
+                double bestPrice = tp.getSellOrders().get(0).getPrice();
+                if (bestPrice < limitPrice(instrument, Direction.SELL)) {
+                    broker.addOrder(tp.getSellOrders().get(0).opposite());
+                }
+            }
+        }
+    }
 
+    private double limitPrice(Instrument instrument, Direction dir) {
+        if (dir == Direction.BUY) {
+            return 95;
+        } else {
+            return 90;
+        }
+    }
+
+    private void cancelMyOrders(Broker broker) {
+        List<Order> list = broker.getMyLiveOrders();
+        for (Order order : list) {
+            TopOrders tp = currentTopOrders.get(order.getInstrument());
+            if (order.getDirection() == Direction.BUY) {
+                double price = tp.getBuyOrders().isEmpty() ? 0 : tp.getBuyOrders().get(0).getPrice();
+                if (order.getPrice() < price - 10) {
+                    broker.cancelOrderById(order.getOrderId());
+                }
+            } else {
+                double price = tp.getSellOrders().isEmpty() ? 100 : tp.getSellOrders().get(0).getPrice();
+                if (order.getPrice() > price + 10) {
+                    broker.cancelOrderById(order.getOrderId());
+                }
+            }
+        }
     }
 }
